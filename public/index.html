@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Conveyor</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2315212C'/%3E%3Cpath d='M6 11l6 5-6 5M14 11l6 5-6 5M22 11l6 5-6 5' stroke='%23F5B400' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6"/><path d="M6 11l6 5-6 5M14 11l6 5-6 5M22 11l6 5-6 5"/></svg>
+      <span>Conveyor</span>
+    </div>
+    <div class="topstats">
+      <div class="topstat"><span class="topstat-value" id="stat-rate">0</span><span class="topstat-label">jobs/s</span></div>
+      <div class="topstat"><span class="topstat-value" id="stat-workers">0</span><span class="topstat-label">workers online</span></div>
+      <div class="connection" id="connection" data-state="connecting"><span class="dot"></span><span id="connection-text">Connecting</span></div>
+    </div>
+    <div class="add-jobs">
+      <button type="button" class="btn btn-brand" data-load="100">Add 100 jobs</button>
+      <button type="button" class="btn btn-ghost-dark" data-load="1000">Add 1,000</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="line-panel" aria-labelledby="line-title">
+      <div class="panel-head">
+        <h1 id="line-title">The line</h1>
+        <p class="hint" id="line-hint">Every job moves left to right. Failures loop back through retry until they succeed or run out of attempts.</p>
+      </div>
+
+      <svg class="line" id="line" viewBox="0 0 1000 300" role="img" aria-label="Job lifecycle with live counts">
+        <defs>
+          <clipPath id="belt-a"><rect x="232" y="128" width="166" height="20" rx="3"/></clipPath>
+          <clipPath id="belt-b"><rect x="572" y="128" width="166" height="20" rx="3"/></clipPath>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0L10 5L0 10z" class="arrowhead"/>
+          </marker>
+        </defs>
+
+        <!-- belts -->
+        <rect class="belt" x="232" y="128" width="166" height="20" rx="3"/>
+        <rect class="belt" x="572" y="128" width="166" height="20" rx="3"/>
+        <g clip-path="url(#belt-a)"><g class="chevrons" id="chev-a"></g></g>
+        <g clip-path="url(#belt-b)"><g class="chevrons" id="chev-b"></g></g>
+
+        <!-- side paths -->
+        <path class="flow" d="M150 64 V 92" marker-end="url(#arrow)"/>
+        <path class="flow flow-retry" d="M485 184 V 236 H 340" marker-end="url(#arrow)"/>
+        <path class="flow flow-retry" d="M232 236 H 160 V 186" marker-end="url(#arrow)"/>
+        <path class="flow flow-dead" d="M485 184 V 210 H 640 V 222" marker-end="url(#arrow)"/>
+
+        <!-- stations -->
+        <g class="station" data-state="scheduled" transform="translate(70 12)">
+          <rect width="160" height="50" rx="7"/><rect class="tab" width="5" height="50" rx="2"/>
+          <text class="st-label" x="18" y="21">Scheduled</text>
+          <text class="st-count st-count-sm" x="18" y="42" data-count="scheduled">0</text>
+        </g>
+        <g class="station" data-state="waiting" transform="translate(60 94)">
+          <rect width="172" height="88" rx="8"/><rect class="tab" width="5" height="88" rx="2"/>
+          <text class="st-label" x="20" y="28">Waiting</text>
+          <text class="st-count" x="20" y="68" data-count="waiting">0</text>
+        </g>
+        <g class="station" data-state="running" transform="translate(398 94)">
+          <rect width="174" height="88" rx="8"/><rect class="tab" width="5" height="88" rx="2"/>
+          <text class="st-label" x="20" y="28">Running</text>
+          <text class="st-count" x="20" y="68" data-count="running">0</text>
+        </g>
+        <g class="station" data-state="succeeded" transform="translate(738 94)">
+          <rect width="202" height="88" rx="8"/><rect class="tab" width="5" height="88" rx="2"/>
+          <text class="st-label" x="20" y="28">Succeeded</text>
+          <text class="st-count" x="20" y="68" data-count="succeeded">0</text>
+        </g>
+        <g class="station" data-state="retrying" transform="translate(232 214)">
+          <rect width="108" height="46" rx="7"/><rect class="tab" width="5" height="46" rx="2"/>
+          <text class="st-label" x="16" y="19">Retrying</text>
+          <text class="st-count st-count-sm" x="16" y="39" data-count="retrying">0</text>
+        </g>
+        <g class="station" data-state="dead" transform="translate(586 222)">
+          <rect width="150" height="62" rx="7"/><rect class="tab" width="5" height="62" rx="2"/>
+          <text class="st-label" x="16" y="22">Dead letter</text>
+          <text class="st-count st-count-sm" x="16" y="48" data-count="dead">0</text>
+        </g>
+        <g class="station station-quiet" data-state="cancelled" transform="translate(790 222)">
+          <rect width="150" height="62" rx="7"/><rect class="tab" width="5" height="62" rx="2"/>
+          <text class="st-label" x="16" y="22">Cancelled</text>
+          <text class="st-count st-count-sm" x="16" y="48" data-count="cancelled">0</text>
+        </g>
+      </svg>
+
+      <!-- Narrow screens get a plain list instead of the diagram -->
+      <ul class="line-list" id="line-list"></ul>
+    </section>
+
+    <div class="grid-2">
+      <section class="panel" aria-labelledby="tp-title">
+        <div class="panel-head">
+          <h2 id="tp-title">Throughput, last 60 seconds</h2>
+          <div class="legend">
+            <span class="key key-succeeded"></span>Completed
+            <span class="key key-failed"></span>Failed attempts
+          </div>
+        </div>
+        <div class="chart" id="chart">
+          <svg id="chart-svg" viewBox="0 0 600 180" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div class="chart-axis"><span>60s ago</span><span>now</span></div>
+          <div class="tooltip" id="tooltip" hidden></div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="workers-title">
+        <div class="panel-head">
+          <h2 id="workers-title">Workers</h2>
+        </div>
+        <ul class="workers" id="workers"></ul>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="queues-title">
+      <div class="panel-head">
+        <h2 id="queues-title">Queues</h2>
+        <p class="hint">Lag is how long the oldest waiting job has been ready to run.</p>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="queues">
+          <thead>
+            <tr>
+              <th>Queue</th><th class="num">Waiting</th><th class="num">Running</th><th class="num">Retrying</th>
+              <th class="num">Dead</th><th class="num">Done</th><th class="num">Lag</th><th>Rate limit</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="jobs-title">
+      <div class="panel-head">
+        <h2 id="jobs-title">Jobs</h2>
+        <div class="filters">
+          <div class="tabs" role="tablist" id="state-tabs">
+            <button type="button" role="tab" data-state="" aria-selected="true">All</button>
+            <button type="button" role="tab" data-state="waiting">Waiting</button>
+            <button type="button" role="tab" data-state="running">Running</button>
+            <button type="button" role="tab" data-state="retrying">Retrying</button>
+            <button type="button" role="tab" data-state="dead">Dead</button>
+            <button type="button" role="tab" data-state="succeeded">Succeeded</button>
+          </div>
+          <label class="select">
+            <span class="visually-hidden">Queue</span>
+            <select id="queue-filter"><option value="">All queues</option></select>
+          </label>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="jobs">
+          <thead>
+            <tr><th>Job</th><th>Queue</th><th>State</th><th class="num">Attempts</th><th>Created</th><th>Last error</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="empty" id="jobs-empty" hidden>No jobs here yet. Use “Add 100 jobs” at the top, or POST to <code>/api/jobs</code>.</p>
+    </section>
+  </main>
+
+  <aside class="drawer" id="drawer" aria-labelledby="drawer-title" hidden>
+    <div class="drawer-head">
+      <h2 id="drawer-title">Job</h2>
+      <button type="button" class="btn btn-ghost" id="drawer-close" aria-label="Close job details">Close</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script src="app.js" type="module"></script>
+</body>
+</html>

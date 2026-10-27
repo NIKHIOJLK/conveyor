@@ -1,0 +1,54 @@
+# Everything in one command:
+#   docker compose up --build
+#   docker compose up --build --scale worker=3     (three workers)
+# Dashboard: http://localhost:3000
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: conveyor
+    ports:
+      - "5433:5432"   # 5433 on your machine, so it won't clash with a local PostgreSQL
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: .
+    image: conveyor
+    command: ["node", "dist/db/migrate.js"]
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/conveyor
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: conveyor
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/conveyor
+      DEMO_MODE: "true"
+    ports:
+      - "3000:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: conveyor
+    command: ["node", "dist/worker.js", "--concurrency", "10"]
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/conveyor
+    stop_grace_period: 35s   # give the graceful shutdown time to finish running jobs
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

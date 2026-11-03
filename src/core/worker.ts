@@ -26,6 +26,11 @@ export interface WorkerOptions {
   queues?: string[];
   /** Handlers by job name. */
   handlers: Record<string, JobHandler>;
+  /**
+   * Runs jobs whose name has no entry in `handlers`. The HTTP task worker uses this
+   * to forward every job to a URL built from its name.
+   */
+  defaultHandler?: JobHandler;
   /** Max jobs running at once in this worker. Default 5. */
   concurrency?: number;
   /**
@@ -78,10 +83,11 @@ export class Worker extends EventEmitter<WorkerEvents> {
   readonly concurrency: number;
   private readonly queue: Queue;
   private readonly opts: Required<
-    Omit<WorkerOptions, 'id' | 'queues' | 'concurrency' | 'handlers' | 'queueConcurrency'>
+    Omit<WorkerOptions, 'id' | 'queues' | 'concurrency' | 'handlers' | 'queueConcurrency' | 'defaultHandler'>
   >;
   private readonly queueCaps: Record<string, number>;
   private readonly handlers: Record<string, JobHandler>;
+  private readonly defaultHandler: JobHandler | undefined;
   private readonly running = new Map<number, Running>();
   private timers: NodeJS.Timeout[] = [];
   private listener: pg.PoolClient | null = null;
@@ -99,6 +105,7 @@ export class Worker extends EventEmitter<WorkerEvents> {
     this.queues = options.queues?.length ? options.queues : ['default'];
     this.concurrency = Math.max(1, options.concurrency ?? 5);
     this.handlers = options.handlers;
+    this.defaultHandler = options.defaultHandler;
     this.queueCaps = options.queueConcurrency ?? {};
     this.id = options.id ?? `${hostname()}-${process.pid}-${randomBytes(3).toString('hex')}`;
     const leaseMs = options.leaseMs ?? 30_000;
@@ -248,7 +255,7 @@ export class Worker extends EventEmitter<WorkerEvents> {
       log: (message) => this.emit('job:log', job, message),
     };
     try {
-      const handler = this.handlers[job.name];
+      const handler = this.handlers[job.name] ?? this.defaultHandler;
       if (!handler)
         throw Object.assign(new Error(`No handler registered for '${job.name}'`), { name: 'PermanentError' });
       const result = await abortable(handler(job.payload, ctx), controller.signal);

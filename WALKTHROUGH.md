@@ -172,6 +172,13 @@ Kubernetes and Docker send SIGTERM and then SIGKILL after a grace period, which 
 - **Migrations** run under a PostgreSQL advisory lock, so containers starting together can't apply the
   same migration twice.
 
+### 4.14 HTTP tasks (`src/http/handler.ts`)
+A worker with a `defaultHandler` that POSTs each job to `{TASKS_URL}/{job name}` with a shared secret.
+The response code decides the outcome: 2xx succeeded, 5xx/408/429/timeouts retried, other 4xx are
+permanent. This makes Conveyor usable from any language: the ticket-booking project (Spring Boot)
+inserts jobs with SQL inside its own transactions and receives them back as HTTP calls. It is the
+same design as Google Cloud Tasks, and a good answer to "how would another team use your queue?"
+
 ## 5. Testing strategy
 Tests run against **real PostgreSQL**, because the guarantees live in SQL (`SKIP LOCKED`, row locks,
 triggers) and an in-memory fake would test nothing. Highlights:
@@ -264,5 +271,6 @@ shows it within a second over SSE.
   killing workers mid-job.
 - Added a global token-bucket rate limiter in PL/pgSQL, per-queue concurrency caps and idempotency keys;
   cut job pickup latency from 471 ms to 1.7 ms (p50) with LISTEN/NOTIFY; ~2,300 jobs/s on a 2-core VM.
-- Shipped a real-time dashboard (Server-Sent Events) with per-job timelines, Prometheus metrics, 43
-  integration tests, Docker Compose and GitHub Actions CI.
+- Shipped a real-time dashboard (Server-Sent Events) with per-job timelines, Prometheus metrics, 49
+  integration tests and GitHub Actions CI; added HTTP tasks so services in any language (e.g. a Spring
+  Boot app) can enqueue jobs with SQL and receive them as retried HTTP callbacks.

@@ -33,7 +33,8 @@ recover the ones a crashed worker left behind, and set aside the ones that can n
 - **Per-queue concurrency caps**, so slow jobs can't occupy every slot and starve other queues.
 - **Timeouts**, **graceful shutdown** (running jobs finish; stragglers are handed back), **pause/resume**.
 - **Live dashboard** over Server-Sent Events, a full timeline for every job, and **Prometheus metrics**.
-- **43 tests against a real PostgreSQL**, including concurrency, crash recovery and rate limiting.
+- **HTTP tasks**: any service, in any language, can hand work to Conveyor and get it back as retried HTTP calls.
+- **49 tests against a real PostgreSQL**, including concurrency, crash recovery and rate limiting.
 
 <p align="center"><img src="docs/job-timeline.png" width="380" alt="Timeline of a job that failed twice with backoff, then succeeded"></p>
 <p align="center"><em>Every job keeps its history: a webhook that failed twice, backed off, and succeeded on attempt 3.</em></p>
@@ -174,6 +175,34 @@ process.on('SIGTERM', () => worker.stop()); // graceful shutdown
 Any service in any language can also enqueue with a plain SQL `INSERT INTO jobs (...)`. A database
 trigger wakes the workers.
 
+## HTTP tasks: use Conveyor from any language
+
+The HTTP task worker turns every job into an HTTP call to your own service, the same model as
+Google Cloud Tasks. Your service (Java, Python, anything) adds a job with a plain SQL `INSERT`, and
+Conveyor does the scheduling, retries, backoff, dead-lettering and rate limiting:
+
+```
+job "send-ticket-email" in queue "booking-emails"
+  -> POST {TASKS_URL}/send-ticket-email
+     X-Conveyor-Secret: <TASKS_SECRET>     X-Conveyor-Job-Id: 42     X-Conveyor-Attempt: 1
+     { "jobId": 42, "attempt": 1, "payload": { "bookingId": 7 } }
+```
+
+| Your service answers | Conveyor does |
+|---|---|
+| 2xx | marks the job succeeded (a JSON body is stored as its result) |
+| 5xx, 408, 429, timeout, connection refused | retries with backoff |
+| any other 4xx | gives up straight away (dead-letter queue) |
+
+```powershell
+# in .env: TASKS_URL=http://localhost:8080/internal/tasks and TASKS_SECRET=...
+npm run worker:http -- --queues booking-tasks,booking-emails
+```
+
+[ticket-booking](https://github.com/NIKHIOJLK/ticket-booking) uses this: its Spring Boot app writes
+jobs in the same database transaction as the booking (so a confirmed booking always gets its ticket
+email), and Conveyor calls it back to send emails, release unpaid seat holds and notify the waitlist.
+
 ## Performance
 
 Measured with `npm run benchmark` on a 2-core cloud VM, with PostgreSQL on the same machine and all
@@ -192,7 +221,7 @@ each worker brings its own CPU.
 ## Tests
 
 ```powershell
-npm test          # 43 tests against the conveyor_test database
+npm test          # 49 tests against the conveyor_test database
 npm run lint      # Biome
 npm run typecheck
 ```
